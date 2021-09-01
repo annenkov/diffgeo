@@ -1,4 +1,5 @@
 From Coq Require Import ssreflect ssrfun ssrbool.
+From Coq Require Import Program.
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
@@ -44,12 +45,31 @@ Proof.
   apply add_zero.
 Qed.
 
+Lemma neg_zero_zero : - _0 = _0.
+Proof.
+  transitivity (_0 + (-_0)).
+  now rewrite add_zero.
+  apply negate_inv.
+Qed.
+
+Hint Rewrite neg_zero_zero : real.
 Hint Rewrite add_zero: real.
 Hint Rewrite add_zero_r: real.
  
 Hint Rewrite negate_inv: real.
 Hint Rewrite add_zero: real.
 
+Lemma plus_eq_move_neg a b c : a + b = c <-> a = - b + c.
+Proof.
+  split.
+  + intros H.
+    assert (a + (b + (-b)) = - b + c).
+    { rewrite add_assoc. rewrite H. apply add_commute. }
+    now autorewrite with real in *.
+  + intros H. subst. rewrite <- add_assoc.
+    rewrite add_commute.
+    rewrite <- add_assoc. now autorewrite with real.
+Qed.
 
 (* mul is a commutative ring structure *)
 Axiom mul: R -> R -> R.
@@ -58,6 +78,21 @@ Infix "×" := (mul) (at level 25). (* [mul] binds tighter then [add], so its lev
 Axiom mul_commute: forall (a b: R), a × b = b × a.
 Axiom mul_one: forall (a: R), _1 × a = a.
 Axiom mul_zero: forall (a: R), _0 × a = _0.
+
+(* disstributivity *)
+
+Axiom left_distr : forall (a b c : R), a × (b + c) = a × b + a × c.
+
+Lemma right_distr a b c : (b + c) × a = b × a + c × a.
+Proof.
+  rewrite mul_commute.
+  replace (b × a) with (a × b) by apply mul_commute.
+  replace (c × a) with (a × c) by apply mul_commute.
+  apply left_distr.
+Qed.
+
+Hint Rewrite left_distr : real.
+Hint Rewrite right_distr : real.
 
 
 Lemma mul_zero': forall (a: R), a × _0 = _0.
@@ -72,6 +107,27 @@ Axiom mul_negate:
 Hint Rewrite mul_one: real.
 Hint Rewrite mul_zero: real.
 Hint Rewrite mul_zero': real.
+
+
+Lemma neg_times_pos_neg a b : (-a) × b = - a × b.
+Proof.
+  replace (- a × b) with (- a × b + _0) by apply add_zero_r.
+  apply (plus_eq_move_neg _ _ _0).
+  rewrite <- right_distr.
+  replace (-a + a) with (a + (-a)) by apply add_commute.
+  rewrite negate_inv. now autorewrite with real.
+Qed.
+
+Lemma neg_times_neg_pos a b : (-a) × (- b) = a × b.
+Proof.
+  rewrite neg_times_pos_neg. rewrite mul_commute.
+  rewrite neg_times_pos_neg.
+  symmetry.
+  replace (- - b × a) with (- - b × a + _0) by apply add_zero_r.
+  apply plus_eq_move_neg.
+  rewrite mul_commute.
+  now autorewrite with real.
+Qed.
 
 (* Axiom 2: relation that is transitive and irreflexive *)
 Axiom lt : R -> R -> Prop.
@@ -174,3 +230,32 @@ Qed.
 Definition mul_fn (f: R -> R) (g: R -> R) (x: R): R := mul (f x) (g x).
 Definition add_fn(f: R -> R) (g: R -> R) (x: R): R := add (f x) (g x).
 
+
+Definition intersect_2D (P Q : R -> R -> Prop) :=
+  {(x,y) : R * R | P x y /\ Q x y}.
+
+Definition circle_around (center : R * R) (r : R) : R -> R -> Prop :=
+  fun x y => let (a,b) := center in (x + (-a))² + (y + (-b))² = r².
+
+
+(* [SDG] Exercise 1.2: [D] is the intersection of a circle at (0,1) and the x-axis *)
+Lemma D_circle_with_x_axis
+      (c := circle_around (_0,_1) _1)
+      (x_axis := fun x y => (y = _0))
+      (new_D : intersect_2D c x_axis) :
+  infinitesimal ((proj1_sig new_D)).1.
+Proof.
+  destruct new_D as [[x_c y_c] Hintersect].
+  subst c x_axis.
+  unfold circle_around in *.
+  cbn in *.
+  destruct Hintersect as [Hc Hl].
+  subst.
+  repeat autorewrite with real in *.
+  rewrite neg_times_neg_pos in Hc.
+  repeat autorewrite with real in *.
+  rewrite -> plus_eq_move_neg in Hc.
+  rewrite add_commute in Hc.
+  repeat autorewrite with real in *.
+  apply Hc.
+Qed.
